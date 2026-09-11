@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   packages: write
+  security-events: write
 
 jobs:
   build:
@@ -32,8 +33,39 @@ jobs:
             type=sha,format=short
 
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: .
-          push: true
+          push: false
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Report vulnerabilities to the Security tab
+        uses: aquasecurity/trivy-action@0.28.0
+        if: always()
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:latest
+          format: sarif
+          output: trivy-results.sarif
+          severity: "CRITICAL,HIGH"
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Fail on fixable critical/high vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:latest
+          format: table
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+
+      - name: Push image
+        run: |
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            docker push "$tag"
+          done
