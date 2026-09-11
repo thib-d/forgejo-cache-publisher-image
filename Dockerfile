@@ -25,9 +25,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 --shell /bin/sh runner
 
+# Recreate the /usr/local/bin symlinks natively instead of COPYing them: COPY
+# dereferences a single symlinked file across build stages, which strands the
+# PyInstaller-bundled aws binary without its sibling libpython*.so (both live
+# together under aws-cli/v2/*/dist, not in /usr/local/bin).
 COPY --from=builder /usr/local/aws-cli /usr/local/aws-cli
-COPY --from=builder /usr/local/bin/aws /usr/local/bin/aws
-COPY --from=builder /usr/local/bin/aws_completer /usr/local/bin/aws_completer
+RUN ln -s /usr/local/aws-cli/v2/current/bin/aws /usr/local/bin/aws \
+    && ln -s /usr/local/aws-cli/v2/current/bin/aws_completer /usr/local/bin/aws_completer
 
 USER runner
 WORKDIR /home/runner
